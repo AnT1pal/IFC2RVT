@@ -18,6 +18,17 @@ IFC2RVT читает её сам и строит элементы через Rev
 
 ## Быстрый старт
 
+Готовая сборка — в [Releases](https://github.com/AnT1pal/IFC2RVT/releases): скачайте
+`IFC2RVT-Setup.exe`, запустите, выберите «установить». Права администратора не нужны — всё
+кладётся в профиль пользователя. Удаляется оттуда же или через «Программы и компоненты».
+
+```powershell
+IFC2RVT-Setup.exe --install --versions 2026    # без диалога
+IFC2RVT-Setup.exe --uninstall
+```
+
+Из исходников:
+
 ```powershell
 git clone https://github.com/AnT1pal/IFC2RVT.git
 cd IFC2RVT
@@ -257,6 +268,20 @@ tools/IfcProbe/bin/Release/IfcProbe.exe model.ifc report.txt
 его IFC GUID, сущность, результат (нативно / DirectShape / пропущено / ошибка), созданный
 элемент Revit и причина, если нативно не вышло. По этому CSV видно, где конвертер упирается
 в конкретную модель.
+
+## Сборка релиза
+
+```powershell
+powershell -ExecutionPolicy Bypass -File pack.ps1 -Version 0.1.0
+```
+
+Кладёт в `dist\`: `IFC2RVT-Setup.exe` (установщик со встроенными бинарниками, ~7 МБ),
+`IFC2RVT-<версия>.zip` (те же сборки россыпью, для ручной установки и для того, чтобы их можно
+было посмотреть) и `SHA256SUMS.txt`.
+
+Установщик собран под .NET Framework 4.8 намеренно: он есть в любой Windows 10 и новее, поэтому
+устанавливать рантайм ради установщика не нужно. Самодостаточная сборка на .NET 8 весила бы
+шестьдесят мегабайт ради той же работы.
 
 ## Лицензия
 

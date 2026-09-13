@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- .NET Framework 4.8 ships with Windows 10 and later, so the installer needs no runtime of
+         its own. A self-contained .NET 8 build would be sixty megabytes for the same job. -->
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>IFC2RVT-Setup</AssemblyName>
+    <RootNamespace>IFC2RVT.Setup</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\dist\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+    <AssemblyTitle>IFC2RVT Setup</AssemblyTitle>
+    <Product>IFC2RVT</Product>
+    <Company>baidurovlabs.ru</Company>
+    <Copyright>(c) 2026 baidurovlabs.ru — GNU GPLv3</Copyright>
+    <Version>0.1.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Built by pack.ps1 before this project compiles: the add-in binaries for every Revit
+         family, plus the licence text the GPL requires to travel with them. -->
+    <EmbeddedResource Include="payload.zip" Condition="Exists('payload.zip')" LogicalName="payload.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+
+</Project>

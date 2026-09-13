@@ -30,3 +30,7 @@ archive/
 probe*.txt
 IFC2RVT_*.csv
 IFC2RVT_error_*.txt
+
+# Release artefacts
+dist/
+tools/Installer/payload.zip
