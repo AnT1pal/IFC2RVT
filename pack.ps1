@@ -65,6 +65,10 @@ try {
 
     # --- 3. installer -------------------------------------------------------------------------
 
+    Step 'Иконка'
+    Push-Location (Join-Path $root 'tools\Installer')
+    try { & python make-icon.py } finally { Pop-Location }
+
     Step 'Сборка установщика'
     & dotnet build (Join-Path $root 'tools\Installer\Installer.csproj') -c Release --nologo -v quiet `
         -p:Version=$Version -p:AssemblyVersion="$Version.0" -p:FileVersion="$Version.0"
