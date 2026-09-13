@@ -1,0 +1,32 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# xBIM writes a disk-backed database next to large IFC files
+*.xbim
+*.jfm
+
+# Test models. Client data, and far past the GitHub file size limit:
+# the sample model alone is 254 MB.
+*.ifc
+*.ifczip
+*.ifcxml
+*.rvt
+*.rfa
+sample/
+archive/
+*.zip
+
+# Client correspondence. Never publish.
+*.ogg
+*.mp3
+*.wav
+*.m4a
+
+# Probe and conversion output
+probe*.txt
+IFC2RVT_*.csv
+IFC2RVT_error_*.txt

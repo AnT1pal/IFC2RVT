@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>IFC2RVT</Name>
+    <Assembly>IFC2RVT.dll</Assembly>
+    <AddInId>7f3a1c52-9b64-4d8e-a1f0-5c2b9e7d4a31</AddInId>
+    <FullClassName>IFC2RVT.App</FullClassName>
+    <VendorId>IFC2RVT</VendorId>
+    <VendorDescription>IFC to native Revit elements converter</VendorDescription>
+  </AddIn>
+</RevitAddIns>

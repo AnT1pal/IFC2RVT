@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
+    <AssemblyName>IFC2RVT.Core</AssemblyName>
+    <RootNamespace>IFC2RVT</RootNamespace>
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\bin\$(RevitVersion)\</OutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- xBIM lives only here. This assembly is loaded into a private AssemblyLoadContext so its
+         Microsoft.Extensions.* dependencies never collide with the copies Dynamo puts into the
+         default context. See IFC2RVT/Hosting/CoreLoader.cs. -->
+    <PackageReference Include="Xbim.Essentials" Version="6.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Contract types only (IConversionRunner, ConversionOptions, ConversionReport).
+         Private=false: the add-in project already emits this assembly into the same folder. -->
+    <ProjectReference Include="..\IFC2RVT\IFC2RVT.csproj" Private="false" />
+  </ItemGroup>
+
+</Project>

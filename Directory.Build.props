@@ -1,0 +1,37 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>false</ImplicitUsings>
+    <!-- Output goes to bin\<RevitVersion>\ without a framework subfolder. This flag collapses
+         the intermediate path too, which would make both target frameworks share one obj folder
+         and overwrite each other's generated AssemblyInfo, so obj is re-separated below. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <IntermediateOutputPath Condition="'$(TargetFramework)' != ''">obj\$(Configuration)\$(TargetFramework)\</IntermediateOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Company>IFC2RVT</Company>
+    <Product>IFC2RVT</Product>
+    <Version>0.1.0</Version>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+
+  <!--
+    Map target framework -> Revit version family.
+      net48            : compiled against the Revit 2022 API, loads in Revit 2022/2023/2024
+      net8.0-windows   : compiled against the Revit 2025 API, loads in Revit 2025/2026
+    Revit is API-forward-tolerant inside one .NET runtime family, so two builds cover 2022-2026.
+  -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <RevitVersion>2022</RevitVersion>
+    <DefineConstants>$(DefineConstants);REVIT2022_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <RevitVersion>2025</RevitVersion>
+    <DefineConstants>$(DefineConstants);REVIT2022_OR_GREATER;REVIT2023_OR_GREATER;REVIT2024_OR_GREATER;REVIT2025_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+
+</Project>

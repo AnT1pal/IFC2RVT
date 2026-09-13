@@ -1,0 +1,21 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IFC2RVT", "src\IFC2RVT\IFC2RVT.csproj", "{4B1D7E90-2C8A-4F35-9D61-8E0A3F5C7B24}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IFC2RVT.Core", "src\IFC2RVT.Core\IFC2RVT.Core.csproj", "{8C2E4A17-5D93-4B60-A7E2-1F4D8B60C935}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4B1D7E90-2C8A-4F35-9D61-8E0A3F5C7B24}.Debug|x64.ActiveCfg = Debug|x64
+		{4B1D7E90-2C8A-4F35-9D61-8E0A3F5C7B24}.Debug|x64.Build.0 = Debug|x64
+		{4B1D7E90-2C8A-4F35-9D61-8E0A3F5C7B24}.Release|x64.ActiveCfg = Release|x64
+		{4B1D7E90-2C8A-4F35-9D61-8E0A3F5C7B24}.Release|x64.Build.0 = Release|x64
+		{8C2E4A17-5D93-4B60-A7E2-1F4D8B60C935}.Debug|x64.ActiveCfg = Debug|x64
+		{8C2E4A17-5D93-4B60-A7E2-1F4D8B60C935}.Debug|x64.Build.0 = Debug|x64
+		{8C2E4A17-5D93-4B60-A7E2-1F4D8B60C935}.Release|x64.ActiveCfg = Release|x64
+		{8C2E4A17-5D93-4B60-A7E2-1F4D8B60C935}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal
