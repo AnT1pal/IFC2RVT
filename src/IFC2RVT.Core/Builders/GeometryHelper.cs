@@ -114,6 +114,71 @@ namespace IFC2RVT.Builders
             return longExtent > 0;
         }
 
+        /// <summary>
+        /// World-space bounding box of built geometry. Used wherever the semantic reading falls
+        /// short and the shape itself has to answer the question - the height of a wall whose body
+        /// would not reduce to a sweep, or the size of an opening that has to be cut.
+        /// </summary>
+        public static bool Extent(IList<GeometryObject> geometry, out XYZ min, out XYZ max)
+        {
+            min = null;
+            max = null;
+            if (geometry == null) return false;
+
+            double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+            double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+            var found = false;
+
+            void Consider(XYZ p)
+            {
+                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y);
+                minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
+                found = true;
+            }
+
+            foreach (var item in geometry)
+            {
+                switch (item)
+                {
+                    case Solid solid when solid.Volume > 0:
+                    {
+                        var box = solid.GetBoundingBox();
+                        if (box == null) continue;
+                        foreach (var corner in BoxCorners(box)) Consider(corner);
+                        break;
+                    }
+
+                    case Mesh mesh:
+                        foreach (var vertex in mesh.Vertices) Consider(vertex);
+                        break;
+                }
+            }
+
+            if (!found) return false;
+
+            min = new XYZ(minX, minY, minZ);
+            max = new XYZ(maxX, maxY, maxZ);
+            return true;
+        }
+
+        /// <summary>The eight corners of a bounding box, taken into world space by its transform.</summary>
+        public static IEnumerable<XYZ> BoxCorners(BoundingBoxXYZ box)
+        {
+            var min = box.Min;
+            var max = box.Max;
+
+            for (int i = 0; i < 8; i++)
+            {
+                var local = new XYZ(
+                    (i & 1) == 0 ? min.X : max.X,
+                    (i & 2) == 0 ? min.Y : max.Y,
+                    (i & 4) == 0 ? min.Z : max.Z);
+
+                yield return box.Transform == null ? local : box.Transform.OfPoint(local);
+            }
+        }
+
         // ---- shells to meshes ----------------------------------------------------------------
 
         /// <summary>

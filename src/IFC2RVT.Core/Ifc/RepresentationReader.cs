@@ -84,6 +84,40 @@ namespace IFC2RVT.Ifc
         }
 
         public IIfcShapeRepresentation BodyOf(IIfcProduct p) => FindRepresentation(p, "Body");
+
+        /// <summary>
+        /// When a product's whole body is one reference to a shared shape, returns that shape and
+        /// the placement of this particular copy.
+        ///
+        /// This is the pattern behind every repeated bolt and bracket in a detailed model: one
+        /// IfcRepresentationMap and thousands of IfcMappedItem pointing at it. Expanding each one
+        /// into its own geometry, which is what reading them naively does, multiplies the work and
+        /// the file size by the number of copies.
+        /// </summary>
+        public bool TryGetSharedShape(IIfcProduct product,
+                                      out IIfcRepresentationMap map,
+                                      out Transform placement)
+        {
+            map = null;
+            placement = Transform.Identity;
+
+            var body = BodyOf(product);
+            if (body == null) return false;
+
+            var items = body.Items.ToList();
+            if (items.Count != 1) return false;
+            if (!(items[0] is IIfcMappedItem mapped)) return false;
+            if (mapped.MappingSource?.MappedRepresentation == null) return false;
+
+            map = mapped.MappingSource;
+            placement = TargetTransform(mapped.MappingTarget)
+                        .Multiply(_placements.FromAxisPlacement(map.MappingOrigin));
+            return true;
+        }
+
+        /// <summary>Items of a shared shape, in the coordinate system of the shape itself.</summary>
+        public IEnumerable<Tuple<IIfcRepresentationItem, Transform>> SharedShapeItems(IIfcRepresentationMap map)
+            => Items(map?.MappedRepresentation);
         public IIfcShapeRepresentation AxisOf(IIfcProduct p) => FindRepresentation(p, "Axis");
         public IIfcShapeRepresentation FootPrintOf(IIfcProduct p) => FindRepresentation(p, "FootPrint");
 

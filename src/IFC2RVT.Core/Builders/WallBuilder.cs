@@ -72,7 +72,7 @@ namespace IFC2RVT.Builders
                                           height, baseZ - level.Elevation, false, false);
                 if (created == null) return BuildResult.Fail("Wall.Create вернул null");
 
-                DisableAutoJoin(created);
+                ApplyJoins(created, wall);
 
                 // A clipped body means the IFC wall was cut by a roof or a slope. The height here
                 // comes from the base extrusion, before the cut, so the top needs attaching to a
@@ -387,17 +387,29 @@ namespace IFC2RVT.Builders
         }
 
         /// <summary>
-        /// Imported walls meet at angles the authoring tool already resolved. Letting Revit
-        /// re-join them silently reshapes geometry, so joins are disabled at both ends.
+        /// Opens a wall end for joining only where the source model says a join belongs.
+        ///
+        /// Revit joins walls on its own and reshapes their ends while doing so, which contradicts
+        /// geometry the authoring tool had already resolved - so the first version simply blocked
+        /// both ends. That is safe but wrong in the other direction: corners that should be mitred
+        /// come out butted, and the plan reads badly.
+        ///
+        /// IfcRelConnectsPathElements says which end of which wall meets what. Where it does,
+        /// Revit is allowed to do its job; everywhere else the end stays closed.
         /// </summary>
-        static void DisableAutoJoin(Wall wall)
+        void ApplyJoins(Wall created, IIfcWall source)
         {
-            try
+            for (int end = 0; end < 2; end++)
             {
-                WallUtils.DisallowWallJoinAtEnd(wall, 0);
-                WallUtils.DisallowWallJoinAtEnd(wall, 1);
+                try
+                {
+                    if (_ctx.Ifc.WallJoinsAt(source, end))
+                        WallUtils.AllowWallJoinAtEnd(created, end);
+                    else
+                        WallUtils.DisallowWallJoinAtEnd(created, end);
+                }
+                catch { }
             }
-            catch { }
         }
     }
 }

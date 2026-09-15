@@ -26,6 +26,12 @@ namespace IFC2RVT.Builders
 
         public BuildResult Build(IIfcProduct product)
         {
+            if (_ctx.Options.ReuseSharedGeometry)
+            {
+                var shared = BuildShared(product);
+                if (shared != null) return shared;
+            }
+
             var geometry = BuildGeometry(product, out var message);
             if (geometry == null || geometry.Count == 0)
                 return BuildResult.Fail(message ?? "геометрия не прочитана");
@@ -49,6 +55,83 @@ namespace IFC2RVT.Builders
             {
                 return BuildResult.Fail("DirectShape: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Places a product whose body is a reference to a shared shape as an instance of a
+        /// DirectShapeType, so the geometry is stored once for all copies.
+        ///
+        /// The sample model has 4070 accessories, 1156 fasteners and 517 mapped representations:
+        /// the same handful of bolts and brackets repeated thousands of times. Building each one
+        /// separately is what makes an imported detailing model enormous and slow.
+        ///
+        /// Returns null when the product has no shared shape, and the caller builds it normally.
+        /// </summary>
+        BuildResult BuildShared(IIfcProduct product)
+        {
+            if (!_ctx.Ifc.Representations.TryGetSharedShape(product, out var map, out var local))
+                return null;
+
+            try
+            {
+                var categoryId = CategoryFor(product);
+                var key = "IFC2RVT_map_" + map.EntityLabel + "_" + BuilderContext.IdValue(categoryId);
+                var library = DirectShapeLibrary.GetDirectShapeLibrary(_ctx.Doc);
+
+                if (!library.ContainsType(key) && !DefineShape(library, map, key, categoryId))
+                    return null;
+
+                var typeId = library.FindDefinitionType(key);
+                if (typeId == null || typeId == ElementId.InvalidElementId) return null;
+
+                var world = _ctx.Ifc.Placements.WorldTransform(product).Multiply(local);
+
+                var instance = DirectShape.CreateElementInstance(
+                    _ctx.Doc, typeId, categoryId, key, world);
+
+                if (instance == null) return null;
+
+                instance.ApplicationId = "IFC2RVT";
+                instance.ApplicationDataId = product.GlobalId.ToString();
+
+                var name = IfcHelpers.Str(product.Name);
+                if (!string.IsNullOrWhiteSpace(name)) instance.SetName(name);
+
+                return BuildResult.Ok(instance);
+            }
+            catch
+            {
+                // Instancing is an optimisation. If anything about it fails, the ordinary path
+                // still produces a correct element, just a heavier one.
+                return null;
+            }
+        }
+
+        /// <summary>Builds the shared shape once, in the coordinates of the shape itself.</summary>
+        bool DefineShape(DirectShapeLibrary library, IIfcRepresentationMap map,
+                         string key, ElementId categoryId)
+        {
+            var materialId = ElementId.InvalidElementId;
+            var geometry = new List<GeometryObject>();
+            var unsupported = new HashSet<string>();
+
+            foreach (var pair in _ctx.Ifc.Representations.SharedShapeItems(map))
+            {
+                var shade = _ctx.Ifc.Styles.ForItem(pair.Item1);
+                var itemMaterial = shade != null ? _ctx.Materials.ResolveShade(shade) : materialId;
+
+                var produced = FromItem(pair.Item1, pair.Item2, itemMaterial, unsupported);
+                if (produced != null) geometry.AddRange(produced);
+            }
+
+            if (geometry.Count == 0) return false;
+
+            var type = DirectShapeType.Create(_ctx.Doc, key, categoryId);
+            if (type == null) return false;
+
+            type.SetShape(geometry);
+            library.AddDefinitionType(key, type.Id);
+            return true;
         }
 
         /// <summary>

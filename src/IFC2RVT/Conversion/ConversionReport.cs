@@ -41,6 +41,8 @@ namespace IFC2RVT.Conversion
         public int LevelsCreated { get; set; }
         public int TypesCreated { get; set; }
         public int SharedParametersCreated { get; set; }
+        public int GridsCreated { get; set; }
+        public int GridsReused { get; set; }
         public int MaterialsCreated { get; set; }
         public int MaterialsColoured { get; set; }
 
@@ -91,6 +93,8 @@ namespace IFC2RVT.Conversion
             sb.AppendLine($"Создано типов:        {TypesCreated}");
             sb.AppendLine($"Общих параметров:     {SharedParametersCreated}");
             sb.AppendLine($"Создано материалов:   {MaterialsCreated} (с цветом из IFC: {MaterialsColoured})");
+            if (GridsCreated > 0 || GridsReused > 0)
+                sb.AppendLine($"Создано осей:         {GridsCreated} (переиспользовано: {GridsReused})");
 
             if (WarningsSuppressed > 0 || ErrorsResolved > 0)
             {

@@ -51,7 +51,15 @@ namespace IFC2RVT.Builders
             var level = _ctx.Levels.For(element, new XYZ(0, 0, Math.Min(start.Z, end.Z)));
             if (level == null) return BuildResult.Fail("нет подходящего уровня");
 
-            var resolved = _ctx.Types.ResolveSymbol(BuiltInCategory.OST_StructuralFraming, SectionName(element));
+            // Size is only a tie-breaker here: unlike a door, a framing family cannot simply be
+            // resized, so the best available outcome is the nearest loaded section, reported.
+            SectionSize(element, out var width, out var height);
+
+            var resolved = width > 0
+                ? _ctx.Types.ResolveSizedSymbol(BuiltInCategory.OST_StructuralFraming,
+                                                SectionName(element), width, height).Type
+                : _ctx.Types.ResolveSymbol(BuiltInCategory.OST_StructuralFraming, SectionName(element));
+
             if (resolved == null) return BuildResult.Fail("в проекте нет семейств несущих конструкций");
 
             try
@@ -79,18 +87,45 @@ namespace IFC2RVT.Builders
         }
 
         /// <summary>
-        /// Profile designation as the exporter wrote it. Revit puts the section into Description
-        /// on export, and the instance Name carries the usual Family:Type:Id, so both are worth
-        /// trying before falling back to whatever is loaded.
+        /// Profile designation, from the most trustworthy source available.
+        ///
+        /// IfcMaterialProfileSet is the real one: a parametric profile with a name the authoring
+        /// tool assigned. Description is loose text an exporter happened to write there, and the
+        /// instance name is the usual Family:Type:Id. Try them in that order.
         /// </summary>
         RevitTypeName SectionName(IIfcElement element)
         {
+            var declared = IfcHelpers.ProfileName(IfcHelpers.StructuralProfile(element));
+            if (!string.IsNullOrWhiteSpace(declared)) return RevitTypeName.Parse(declared);
+
             var description = IfcHelpers.Str(element.Description);
             if (!string.IsNullOrWhiteSpace(description) &&
                 !description.Equals("main piece", StringComparison.OrdinalIgnoreCase))
                 return RevitTypeName.Parse(description);
 
             return _ctx.TypeNameOf(element);
+        }
+
+        /// <summary>
+        /// Cross-section size in feet, taken from the declared profile. Used to pick the closest
+        /// loaded section when nothing matches by name: a beam of roughly the right depth reads far
+        /// better in a model than whichever section happened to be first in the project.
+        /// </summary>
+        bool SectionSize(IIfcElement element, out double width, out double height)
+        {
+            width = 0;
+            height = 0;
+
+            var profile = IfcHelpers.StructuralProfile(element);
+            if (profile == null) return false;
+
+            var loops = _ctx.Ifc.Profiles.Read(profile);
+            if (loops == null || loops.Count == 0) return false;
+
+            var box = ProfileReader.BoundingBoxOf(loops[0]);
+            width = box.Item2.X - box.Item1.X;
+            height = box.Item2.Y - box.Item1.Y;
+            return width > 0 && height > 0;
         }
 
         string SectionNote(IIfcElement element, FamilySymbol symbol)

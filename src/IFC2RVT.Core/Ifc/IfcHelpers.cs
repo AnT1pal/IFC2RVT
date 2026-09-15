@@ -95,6 +95,39 @@ namespace IFC2RVT.Ifc
             return null;
         }
 
+        /// <summary>
+        /// Structural profile associated with an element, following the usage indirection.
+        ///
+        /// This is the real thing: a parametric IfcProfileDef with named dimensions. Reading the
+        /// section out of IfcBeam.Description instead - which is where an exporter writes "L50X3"
+        /// as loose text - gives a string to match on and nothing to measure.
+        /// </summary>
+        public static IIfcProfileDef StructuralProfile(IIfcObjectDefinition o)
+        {
+            if (o == null) return null;
+
+            foreach (var rel in o.HasAssociations.OfType<IIfcRelAssociatesMaterial>())
+            {
+                IIfcMaterialProfileSet set = null;
+
+                switch (rel.RelatingMaterial)
+                {
+                    case IIfcMaterialProfileSetUsage usage: set = usage.ForProfileSet; break;
+                    case IIfcMaterialProfileSet direct: set = direct; break;
+                }
+
+                var profile = set?.MaterialProfiles
+                                  .Select(p => p.Profile)
+                                  .FirstOrDefault(p => p != null);
+                if (profile != null) return profile;
+            }
+            return null;
+        }
+
+        /// <summary>Profile designation as the authoring tool named it, e.g. "L50X3".</summary>
+        public static string ProfileName(IIfcProfileDef profile)
+            => profile == null ? null : Str(profile.ProfileName);
+
         /// <summary>Total thickness of a layer set in raw IFC units, or 0 when unknown.</summary>
         public static double TotalThickness(IIfcMaterialLayerSet ls)
             => ls == null ? 0.0 : ls.MaterialLayers.Sum(l => (double)l.LayerThickness);

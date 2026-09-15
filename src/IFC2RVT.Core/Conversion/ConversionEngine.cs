@@ -62,6 +62,15 @@ namespace IFC2RVT.Conversion
                     });
                     _report.LevelsCreated = levels.LevelsCreated;
 
+                    if (_options.ConvertGrids)
+                    {
+                        progress?.Report("Оси...");
+                        var grids = new GridBuilder(ctx);
+                        RunBatch("Оси", grids.BuildAll);
+                        _report.GridsCreated = grids.Created;
+                        _report.GridsReused = grids.Reused;
+                    }
+
                     progress?.Report("Сбор элементов...");
                     var plan = BuildPlan(ifc);
                     progress?.Report($"К конвертации: {plan.Count} элементов");
@@ -183,13 +192,20 @@ namespace IFC2RVT.Conversion
             var plan = new List<IIfcProduct>();
             plan.AddRange(elements.Where(e => e is IIfcWall));
             plan.AddRange(elements.Where(e => e is IIfcSlab));
+            plan.AddRange(elements.Where(e => e is IIfcCovering));
             plan.AddRange(elements.Where(e => e is IIfcColumn));
             plan.AddRange(elements.Where(e => e is IIfcBeam || e is IIfcMember));
             plan.AddRange(elements.Where(e => e is IIfcDoor || e is IIfcWindow));
             plan.AddRange(elements.Where(e => !(e is IIfcWall) && !(e is IIfcSlab) &&
                                               !(e is IIfcColumn) && !(e is IIfcBeam) && !(e is IIfcMember) &&
-                                              !(e is IIfcDoor) && !(e is IIfcWindow)));
+                                              !(e is IIfcDoor) && !(e is IIfcWindow) && !(e is IIfcCovering)));
             plan.AddRange(spaces);
+
+            // Openings are cut last: the host has to exist before a hole can be made in it.
+            if (_options.ConvertOpeningVoids)
+                plan.AddRange(ifc.All<IIfcOpeningElement>()
+                                 .Where(o => !o.HasFillings.Any())
+                                 .Cast<IIfcProduct>());
 
             if (_options.MaxElements > 0 && plan.Count > _options.MaxElements)
                 plan = plan.Take(_options.MaxElements).ToList();
@@ -246,6 +262,8 @@ namespace IFC2RVT.Conversion
             if (_options.ConvertBeams) builders.Add(new BeamBuilder(ctx));
             if (_options.ConvertOpenings) builders.Add(new OpeningBuilder(ctx));
             if (_options.ConvertSpaces) builders.Add(new RoomBuilder(ctx));
+            if (_options.ConvertCeilings) builders.Add(new CeilingBuilder(ctx));
+            if (_options.ConvertOpeningVoids) builders.Add(new VoidBuilder(ctx));
             return builders;
         }
 
@@ -278,7 +296,9 @@ namespace IFC2RVT.Conversion
                 nativeFailure = result.Message;
             }
 
-            if (!_options.FallbackToDirectShape)
+            // An opening rendered as a solid is not a hole - it is a block inside the wall.
+            // Never hand these to the fallback, whatever the user asked for.
+            if (!_options.FallbackToDirectShape || product is IIfcOpeningElement)
             {
                 _report.Add(guid, entity, name, ConversionOutcome.Skipped, null, 0,
                             nativeFailure ?? "нативный построитель отсутствует");

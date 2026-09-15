@@ -51,9 +51,13 @@ namespace IFC2RVT.UI
             root.Children.Add(Check("beams", "Балки и элементы каркаса (IfcBeam, IfcMember)", _options.ConvertBeams));
             root.Children.Add(Check("openings", "Двери и окна (требуют нативных стен)", _options.ConvertOpenings));
             root.Children.Add(Check("spaces", "Помещения (IfcSpace)", _options.ConvertSpaces));
+            root.Children.Add(Check("ceilings", "Потолки (IfcCovering)", _options.ConvertCeilings));
+            root.Children.Add(Check("grids", "Оси проекта (IfcGrid)", _options.ConvertGrids));
+            root.Children.Add(Check("voids", "Вырезать проёмы без заполнения (ниши, отверстия, шахты)", _options.ConvertOpeningVoids));
 
             root.Children.Add(Header("Остальное"));
             root.Children.Add(Check("fallback", "Всё непреобразованное — в DirectShape", _options.FallbackToDirectShape));
+            root.Children.Add(Check("reuse", "Переиспользовать повторяющуюся геометрию (меньше размер файла)", _options.ReuseSharedGeometry));
             root.Children.Add(Check("properties", "Переносить наборы свойств в общие параметры", _options.TransferProperties));
             root.Children.Add(Check("typeProps", "Включая свойства типа (IfcRelDefinesByType)", _options.IncludeTypeProperties));
             root.Children.Add(Check("names", "Подбирать типы по именам Revit из IFC (Семейство:Тип:Id)", _options.UseRevitNameHeuristic));
@@ -218,6 +222,10 @@ namespace IFC2RVT.UI
             _options.ConvertBeams = IsChecked("beams");
             _options.ConvertOpenings = IsChecked("openings");
             _options.ConvertSpaces = IsChecked("spaces");
+            _options.ConvertCeilings = IsChecked("ceilings");
+            _options.ConvertGrids = IsChecked("grids");
+            _options.ConvertOpeningVoids = IsChecked("voids");
+            _options.ReuseSharedGeometry = IsChecked("reuse");
             _options.FallbackToDirectShape = IsChecked("fallback");
             _options.TransferProperties = IsChecked("properties");
             _options.IncludeTypeProperties = IsChecked("typeProps");

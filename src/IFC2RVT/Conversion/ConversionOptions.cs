@@ -15,6 +15,26 @@ namespace IFC2RVT.Conversion
         public bool ConvertBeams { get; set; } = false;
         public bool ConvertOpenings { get; set; } = true;
         public bool ConvertSpaces { get; set; } = true;
+        public bool ConvertCeilings { get; set; } = true;
+
+        /// <summary>
+        /// Create project grids from IfcGrid. A drawing is dimensioned from its grids, so an
+        /// import without them is awkward even when every wall came through perfectly.
+        /// </summary>
+        public bool ConvertGrids { get; set; } = true;
+
+        /// <summary>
+        /// Cut IfcOpeningElement that nothing fills into its host: niches, service penetrations,
+        /// shafts. Without this the host keeps the holes the source model had pierced through it.
+        /// </summary>
+        public bool ConvertOpeningVoids { get; set; } = true;
+
+        /// <summary>
+        /// Store geometry that many elements share once, as a DirectShapeType, instead of copying
+        /// it per element. Detailing models are mostly the same handful of bolts and brackets
+        /// repeated thousands of times, and copying each one is what makes them enormous.
+        /// </summary>
+        public bool ReuseSharedGeometry { get; set; } = true;
 
         /// <summary>Create DirectShape for everything that has no native builder or whose builder failed.</summary>
         public bool FallbackToDirectShape { get; set; } = true;

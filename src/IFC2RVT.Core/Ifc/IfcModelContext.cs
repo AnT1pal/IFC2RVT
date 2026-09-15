@@ -39,6 +39,15 @@ namespace IFC2RVT.Ifc
         /// <summary>Opening -> the element it was cut from (usually a wall).</summary>
         public Dictionary<int, IIfcElement> OpeningHosts { get; }
 
+        /// <summary>
+        /// Wall -> which of its ends the model says are joined to another wall.
+        ///
+        /// Revit re-joins walls on its own and reshapes their ends while doing so, which quietly
+        /// contradicts geometry the authoring tool had already resolved. Knowing where a join was
+        /// actually intended means only those ends need to stay open.
+        /// </summary>
+        public Dictionary<int, HashSet<IfcConnectionTypeEnum>> WallConnections { get; }
+
         public IfcModelContext(string path, double shortCurveTolerance)
         {
             _store = IfcStore.Open(path);
@@ -58,7 +67,9 @@ namespace IFC2RVT.Ifc
 
             OpeningFillings = new Dictionary<int, IIfcElement>();
             OpeningHosts = new Dictionary<int, IIfcElement>();
+            WallConnections = new Dictionary<int, HashSet<IfcConnectionTypeEnum>>();
             IndexOpenings();
+            IndexConnections();
         }
 
         string ReadApplication()
@@ -93,6 +104,38 @@ namespace IFC2RVT.Ifc
                 var filling = rel.RelatedBuildingElement;
                 if (opening != null && filling != null) OpeningFillings[opening.EntityLabel] = filling;
             }
+        }
+
+        void IndexConnections()
+        {
+            foreach (var rel in _store.Instances.OfType<IIfcRelConnectsPathElements>())
+            {
+                Record(rel.RelatingElement, rel.RelatingConnectionType);
+                Record(rel.RelatedElement, rel.RelatedConnectionType);
+            }
+        }
+
+        void Record(IIfcElement element, IfcConnectionTypeEnum end)
+        {
+            if (element == null) return;
+
+            if (!WallConnections.TryGetValue(element.EntityLabel, out var ends))
+                WallConnections[element.EntityLabel] = ends = new HashSet<IfcConnectionTypeEnum>();
+
+            ends.Add(end);
+        }
+
+        /// <summary>
+        /// True when the model declares a join at the given end of a wall. ATSTART and ATEND map
+        /// onto the two Revit wall ends; ATPATH is a T-junction along the run and does not.
+        /// </summary>
+        public bool WallJoinsAt(IIfcElement wall, int end)
+        {
+            if (wall == null) return false;
+            if (!WallConnections.TryGetValue(wall.EntityLabel, out var ends)) return false;
+
+            var wanted = end == 0 ? IfcConnectionTypeEnum.ATSTART : IfcConnectionTypeEnum.ATEND;
+            return ends.Contains(wanted);
         }
 
         /// <summary>The opening a door or window sits in, if the exporter declared one.</summary>
