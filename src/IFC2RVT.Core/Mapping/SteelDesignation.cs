@@ -131,7 +131,10 @@ namespace IFC2RVT.Mapping
             // Trailing bracket left over from "Гн[160Х60Х4]" split on the closing half.
             value = value.TrimEnd(']', ' ');
 
-            return Regex.Replace(value, @"\s+", " ").Trim();
+            // Whitespace is typing, not meaning: a project type named "I 20Б1" and a file that
+            // writes "I20Б1" are asking for the same rolled section, and a comparison that keeps
+            // the space reports a missing family that is sitting in the project.
+            return Regex.Replace(value, @"\s+", string.Empty);
         }
 
         /// <summary>True when two designations name the same section, whatever the spelling.</summary>
