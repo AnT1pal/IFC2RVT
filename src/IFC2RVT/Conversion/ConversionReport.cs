@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -47,6 +47,13 @@ namespace IFC2RVT.Conversion
 
         /// <summary>Framing families generated from the section outlines found in the file.</summary>
         public int SectionFamiliesCreated { get; set; }
+
+        /// <summary>
+        /// Of those, how many had a member placed and measured at the length it was placed at.
+        /// Worth printing on its own line: a family that loads and does not stretch builds every
+        /// member at the template's nominal size without raising anything.
+        /// </summary>
+        public int SectionFamiliesVerified { get; set; }
 
         /// <summary>What the section generator made, and what it declined to make and why.</summary>
         public List<string> SectionNotes { get; } = new List<string>();
@@ -106,7 +113,8 @@ namespace IFC2RVT.Conversion
             if (GridsCreated > 0 || GridsReused > 0)
                 sb.AppendLine($"Создано осей:         {GridsCreated} (переиспользовано: {GridsReused})");
             if (SectionFamiliesCreated > 0)
-                sb.AppendLine($"Семейств сечений:     {SectionFamiliesCreated} (по контурам из файла)");
+                sb.AppendLine($"Семейств сечений:     {SectionFamiliesCreated} " +
+                              $"(по контурам из файла; длина проверена у {SectionFamiliesVerified})");
 
             if (SectionNotes.Count > 0)
             {

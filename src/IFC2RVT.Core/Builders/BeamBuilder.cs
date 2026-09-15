@@ -48,6 +48,11 @@ namespace IFC2RVT.Builders
             if (start.DistanceTo(end) <= _ctx.ShortCurveTolerance)
                 return BuildResult.Fail("вырожденная ось");
 
+            var trimmed = ApplyClips(extrusion, world, ref start, ref end);
+            var clipNote = extrusion.WasClipped && !trimmed
+                ? "тело подрезано - длина взята до подрезки"
+                : null;
+
             var level = _ctx.Levels.For(element, new XYZ(0, 0, Math.Min(start.Z, end.Z)));
             if (level == null) return BuildResult.Fail("нет подходящего уровня");
 
@@ -69,7 +74,7 @@ namespace IFC2RVT.Builders
             var generated = _ctx.Sections?.Symbol(wanted?.TypeName);
             if (generated != null)
             {
-                var placed = PlaceGenerated(generated, wanted, frame, start, end, level, extrusion);
+                var placed = PlaceGenerated(generated, wanted, frame, start, end, level, clipNote);
                 if (placed != null) return placed;
             }
 
@@ -108,7 +113,7 @@ namespace IFC2RVT.Builders
                     Element = instance,
                     Message = WallBuilder.Notes(
                         SectionNote(element, resolved),
-                        extrusion.WasClipped ? "тело подрезано - длина взята до подрезки" : null)
+                        clipNote)
                 };
             }
             catch (Exception ex)
@@ -124,7 +129,7 @@ namespace IFC2RVT.Builders
         /// the ordinary search through loaded families and, failing that, to geometry.
         /// </summary>
         BuildResult PlaceGenerated(FamilySymbol symbol, RevitTypeName wanted, Transform frame,
-                                   XYZ start, XYZ end, Level level, ExtrusionInfo extrusion)
+                                   XYZ start, XYZ end, Level level, string clipNote)
         {
             FamilyInstance instance;
             try
@@ -143,22 +148,72 @@ namespace IFC2RVT.Builders
             DetachFromLevel(instance);
             AlignSection(instance, frame, (end - start).Normalize());
 
+            // The generated family ties the far end of its solid to this parameter, so the member is
+            // only as long as it is told to be.
+            SectionFamilyFactory.SetLength(instance, start.DistanceTo(end));
+
             // The first member of each section is measured against the length it was placed at. A
             // family whose solid never got tied to its end planes builds every member at the
             // template's nominal length, and nothing throws when that happens - only a measurement
             // catches it.
-            if (_ctx.Sections.NeedsCheck(wanted?.TypeName) &&
-                !_ctx.Sections.Accept(wanted?.TypeName, instance, start.DistanceTo(end)))
+            if (_ctx.Sections.NeedsCheck(wanted?.TypeName))
             {
-                try { _ctx.Doc.Delete(instance.Id); } catch { }
-                return null;
+                // Measuring before Revit has rebuilt the solid reads the length from before the
+                // parameter was set, which would fail every section for the wrong reason.
+                try { _ctx.Doc.Regenerate(); } catch { }
+
+                if (!_ctx.Sections.Accept(wanted?.TypeName, instance, start.DistanceTo(end)))
+                {
+                    try { _ctx.Doc.Delete(instance.Id); } catch { }
+                    return null;
+                }
             }
 
-            return new BuildResult
+            return new BuildResult { Element = instance, Message = clipNote };
+        }
+
+        /// <summary>
+        /// Shortens the axis where the solid was cut, and says whether it managed to.
+        ///
+        /// A clipped member used to be built to its full uncut extrusion, which puts it straight
+        /// through the face it was cut against. The clip planes are in product coordinates while the
+        /// axis is already in world, so each plane is carried over before it is intersected.
+        /// </summary>
+        bool ApplyClips(ExtrusionInfo extrusion, Transform world, ref XYZ start, ref XYZ end)
+        {
+            if (extrusion.Clips.Count == 0) return false;
+
+            var direction = (end - start).Normalize();
+            var length = start.DistanceTo(end);
+            double low = 0.0, high = length;
+
+            foreach (var clip in extrusion.Clips)
             {
-                Element = instance,
-                Message = extrusion.WasClipped ? "тело подрезано - длина взята до подрезки" : null
-            };
+                var origin = world.OfPoint(clip.Origin);
+                var normal = world.OfVector(clip.Normal);
+                if (normal.GetLength() < 1e-9) continue;
+                normal = normal.Normalize();
+
+                var along = normal.DotProduct(direction);
+
+                // A plane square to the member cuts across it, not along it: nothing to trim.
+                if (Math.Abs(along) < 1e-9) continue;
+
+                var crossing = normal.DotProduct(origin - start) / along;
+                if (crossing <= low || crossing >= high) continue;
+
+                // Material survives on the side the plane keeps; the axis keeps the same interval.
+                if (clip.KeepsPositiveSide == (along > 0)) low = Math.Max(low, crossing);
+                else high = Math.Min(high, crossing);
+            }
+
+            if (low <= 0 && high >= length) return false;
+            if (high - low <= _ctx.ShortCurveTolerance) return false;
+
+            var origin0 = start;
+            start = origin0 + direction.Multiply(low);
+            end = origin0 + direction.Multiply(high);
+            return true;
         }
 
         /// <summary>

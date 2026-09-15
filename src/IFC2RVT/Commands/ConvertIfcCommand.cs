@@ -190,6 +190,19 @@ namespace IFC2RVT.Commands
 
                 // UTF-8 with BOM so Excel picks up the Cyrillic without a manual import step.
                 File.WriteAllText(path, report.BuildCsv(), new UTF8Encoding(true));
+
+                // The summary alongside it, because the CSV is per element and the things worth
+                // knowing about a run are not: which sections were refused, what was measured and
+                // found wrong, how far the model was moved. Those lived only in a dialog that
+                // closes, and a run that quietly built 1786 members at the wrong length is exactly
+                // the case where there has to be something left on disk to read afterwards.
+                try
+                {
+                    File.WriteAllText(Path.ChangeExtension(path, ".txt"),
+                                      report.BuildSummary(), new UTF8Encoding(true));
+                }
+                catch { }
+
                 return path;
             }
             catch

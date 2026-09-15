@@ -49,8 +49,14 @@ namespace IFC2RVT.Mapping
         string _template;
         bool _prepared;
 
+        /// <summary>How many members each section has, for saying what a rejection cost.</summary>
+        readonly Dictionary<string, int> _counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
         public int FamiliesCreated { get; private set; }
         public int SectionsWithoutOutline { get; private set; }
+
+        /// <summary>Sections whose first member was measured and came out the length it was placed at.</summary>
+        public int Verified { get; private set; }
 
         /// <summary>Human-readable account of what was made and what was not, for the report.</summary>
         public List<string> Notes { get; } = new List<string>();
@@ -110,6 +116,7 @@ namespace IFC2RVT.Mapping
 
                 _symbols[section.Key] = symbol;
                 _unverified.Add(section.Key);
+                _counts[section.Key] = section.Count;
                 FamiliesCreated++;
             }
 
@@ -384,18 +391,66 @@ namespace IFC2RVT.Mapping
                     return false;
                 }
 
-                TieToEnds(famDoc, extrusion);
+                if (!DriveLengthByParameter(famDoc, extrusion))
+                {
+                    // Falls back to the way a beam family is normally authored. It works when it
+                    // works and says nothing when it does not, which is why it is second.
+                    TieToEnds(famDoc, extrusion);
+                }
 
                 t.Commit();
                 return true;
             }
         }
 
+        /// <summary>Instance parameter the solid's far end is tied to, set per member on placement.</summary>
+        public const string LengthParameter = "IFC2RVT_Длина";
+
+        /// <summary>
+        /// Makes the solid end follow an instance parameter the converter sets itself.
+        ///
+        /// This replaced aligning the solid to the template's end reference planes, which is how a
+        /// beam family is authored by hand and which failed silently here: 2111 members were built
+        /// at the template's nominal ten feet, and since the median member in the model is 590 mm
+        /// long, 1786 of them came out as three-metre sticks. Nothing threw, and the geometry only
+        /// looked wrong on screen.
+        ///
+        /// An associated parameter has no such failure mode. The association either exists or the
+        /// call throws, the converter writes the exact axis length into it on every member, and
+        /// nothing depends on Revit agreeing about which view a reference is visible in.
+        /// </summary>
+        static bool DriveLengthByParameter(Document famDoc, Extrusion extrusion)
+        {
+            try
+            {
+                var end = extrusion.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM);
+                if (end == null) return false;
+
+                var manager = famDoc.FamilyManager;
+#if REVIT2023_OR_GREATER
+                var parameter = manager.AddParameter(LengthParameter, GroupTypeId.Geometry,
+                                                     SpecTypeId.Length, true);
+#else
+                var parameter = manager.AddParameter(LengthParameter,
+                                                     BuiltInParameterGroup.PG_GEOMETRY,
+                                                     ParameterType.Length, true);
+#endif
+                if (parameter == null) return false;
+
+                manager.Set(parameter, NominalLength);
+                manager.AssociateElementParameterToFamilyParameter(end, parameter);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// Aligns the solid's end faces to the reference planes the template dimensions with its
-        /// Length parameter. Without this the family loads at a fixed ten feet whatever line it is
-        /// placed on; with it the member flexes. Failure here is not fatal - the length is measured
-        /// on the first placed member and the section is dropped if it did not take.
+        /// Length parameter. The hand-authored way, kept only for the case where associating a
+        /// parameter did not work.
         /// </summary>
         static void TieToEnds(Document famDoc, Extrusion extrusion)
         {
@@ -543,6 +598,26 @@ namespace IFC2RVT.Mapping
             return _symbols.TryGetValue(key, out var symbol) ? symbol : null;
         }
 
+        /// <summary>
+        /// Writes the member's true length into the parameter the solid's end is tied to.
+        ///
+        /// Returns false when the family has no such parameter, which means the section fell back to
+        /// aligning the solid to reference planes and takes its length from the placement line.
+        /// </summary>
+        public static bool SetLength(FamilyInstance instance, double length)
+        {
+            try
+            {
+                var parameter = instance.LookupParameter(LengthParameter);
+                if (parameter == null || parameter.IsReadOnly) return false;
+                return parameter.Set(length);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>True when the first member of this section still has to be measured.</summary>
         public bool NeedsCheck(string designation)
         {
@@ -566,23 +641,47 @@ namespace IFC2RVT.Mapping
 
             _unverified.Remove(key);
 
+            const double mm = 304.8;
             var measured = LengthOf(instance);
-            if (measured <= 0) return true;    // nothing measurable; leave it be
+
+            if (measured <= 0)
+            {
+                // Unmeasurable used to pass. It must not: the run that shipped 1786 over-long
+                // members passed exactly here, because the geometry was asked for at coarse detail
+                // and Revit draws framing as a line there, so there was no solid to measure and the
+                // check waved everything through. Geometry we cannot check is geometry we cannot
+                // vouch for, and DirectShape is the honest answer for it.
+                _rejected.Add(key);
+                _symbols.Remove(key);
+                Notes.Add($"Сечение \"{designation}\": длину вставленного элемента измерить не " +
+                          "удалось, проверить семейство нечем - оставлено геометрией.");
+                return false;
+            }
 
             var tolerance = Math.Max(0.05, expectedLength * 0.02);
-            if (Math.Abs(measured - expectedLength) <= tolerance) return true;
+            if (Math.Abs(measured - expectedLength) <= tolerance)
+            {
+                Verified++;
+                return true;
+            }
 
             _rejected.Add(key);
             _symbols.Remove(key);
 
-            var mm = 304.8;
+            var affected = _counts.TryGetValue(key, out var n) ? n : 0;
             Notes.Add($"Сечение \"{designation}\": семейство не растягивается по длине " +
                       $"({measured * mm:F0} мм вместо {expectedLength * mm:F0}) - " +
-                      "элементы этого сечения оставлены геометрией.");
+                      $"элементы этого сечения ({affected} шт) оставлены геометрией.");
             return false;
         }
 
-        /// <summary>Extent of the instance's solid along its own axis, in feet.</summary>
+        /// <summary>
+        /// Extent of the instance's solid along its own axis, in feet.
+        ///
+        /// Fine detail, and that is the whole point: at coarse detail Revit represents structural
+        /// framing as a single line and hands back no solid at all, so this returned nothing and the
+        /// check that depends on it never ran.
+        /// </summary>
         static double LengthOf(FamilyInstance instance)
         {
             try
@@ -593,7 +692,11 @@ namespace IFC2RVT.Mapping
                 var direction = (axis.GetEndPoint(1) - axis.GetEndPoint(0)).Normalize();
 
                 double min = double.MaxValue, max = double.MinValue;
-                var geometry = instance.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Coarse });
+                var geometry = instance.get_Geometry(new Options
+                {
+                    DetailLevel = ViewDetailLevel.Fine,
+                    IncludeNonVisibleObjects = false
+                });
                 if (geometry == null) return 0;
 
                 foreach (var solid in Solids(geometry))

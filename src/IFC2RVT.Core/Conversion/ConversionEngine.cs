@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -84,6 +84,7 @@ namespace IFC2RVT.Conversion
                     if (sections != null)
                     {
                         _report.SectionFamiliesCreated = sections.FamiliesCreated;
+                        _report.SectionFamiliesVerified = sections.Verified;
                         foreach (var note in sections.Notes) _report.SectionNotes.Add(note);
                     }
 
