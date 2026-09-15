@@ -26,4 +26,56 @@
     <ProjectReference Include="..\IFC2RVT\IFC2RVT.csproj" Private="false" />
   </ItemGroup>
 
+  <!--
+    On .NET Framework the dependencies are merged into this assembly instead of shipping beside it.
+
+    Reason, from a real failure on Revit 2022: PnIDModeler, an add-in Autodesk ships in the box,
+    loads Microsoft.Extensions.DependencyInjection.Abstractions 2.2.0.0, and the host config binds
+    every request for that name to it. xBIM needs 8.0/9.0, so IfcStore died in its static
+    constructor with "could not load type ServiceCollection".
+
+    An AssemblyResolve handler cannot help: it only runs when binding FAILS, and here binding
+    succeeds with the wrong assembly. Merging removes the external reference altogether, so there
+    is no name left for the host to redirect.
+
+    Revit 2025+ does not need this - the private AssemblyLoadContext already isolates the core.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageDownload Include="ILRepack" Version="[2.0.48]" />
+  </ItemGroup>
+
+  <Target Name="MergeDependencies" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net48'">
+    <PropertyGroup>
+      <ILRepackExe>$(NuGetPackageRoot)ilrepack\2.0.48\tools\ILRepack.exe</ILRepackExe>
+      <MergedDir>$(OutputPath)merged\</MergedDir>
+      <FrameworkRefDir>$(MSBuildProgramFiles32)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8</FrameworkRefDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- Everything that could collide with another add-in, plus the facades they drag along.
+           IFC2RVT.dll stays out: it is the contract the host loads, and it must keep its identity. -->
+      <MergeInput Include="$(OutputPath)Xbim*.dll" />
+      <MergeInput Include="$(OutputPath)Microsoft.Extensions.*.dll" />
+      <MergeInput Include="$(OutputPath)Microsoft.Bcl.*.dll" />
+      <MergeInput Include="$(OutputPath)Esent.Interop.dll" />
+      <MergeInput Include="$(OutputPath)System.*.dll" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(MergedDir)" />
+
+    <Exec Command="&quot;$(ILRepackExe)&quot; /out:&quot;$(MergedDir)IFC2RVT.Core.dll&quot; /lib:&quot;$(FrameworkRefDir)&quot; /parallel /ndebug &quot;$(OutputPath)IFC2RVT.Core.dll&quot; @(MergeInput->'&quot;%(FullPath)&quot;', ' ')"
+          StandardOutputImportance="low"
+          Condition="Exists('$(ILRepackExe)')" />
+
+    <!-- Replace the loose assemblies with the single merged one, so the add-in folder holds
+         nothing that another add-in could bind to by name. -->
+    <Copy SourceFiles="$(MergedDir)IFC2RVT.Core.dll" DestinationFolder="$(OutputPath)"
+          Condition="Exists('$(MergedDir)IFC2RVT.Core.dll')" />
+    <Delete Files="@(MergeInput)" Condition="Exists('$(MergedDir)IFC2RVT.Core.dll')" />
+    <RemoveDir Directories="$(MergedDir)" />
+
+    <Warning Text="ILRepack не найден ($(ILRepackExe)). Сборка для Revit 2022-2024 останется с внешними зависимостями и может конфликтовать с другими надстройками."
+             Condition="!Exists('$(ILRepackExe)')" />
+  </Target>
+
 </Project>
