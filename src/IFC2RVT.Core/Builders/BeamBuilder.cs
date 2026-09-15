@@ -51,16 +51,38 @@ namespace IFC2RVT.Builders
             var level = _ctx.Levels.For(element, new XYZ(0, 0, Math.Min(start.Z, end.Z)));
             if (level == null) return BuildResult.Fail("нет подходящего уровня");
 
-            // Size is only a tie-breaker here: unlike a door, a framing family cannot simply be
-            // resized, so the best available outcome is the nearest loaded section, reported.
             SectionSize(element, out var width, out var height);
+            var wanted = SectionName(element);
+            var designation = SteelDesignation.Parse(wanted?.TypeName);
 
-            var resolved = width > 0
-                ? _ctx.Types.ResolveSizedSymbol(BuiltInCategory.OST_StructuralFraming,
-                                                SectionName(element), width, height).Type
-                : _ctx.Types.ResolveSymbol(BuiltInCategory.OST_StructuralFraming, SectionName(element));
+            // Sheet, strip and checker plate are flat products, not framing. A fifth of the steel
+            // in the model this was measured on is exactly that, and putting it into a beam family
+            // is wrong by category before it is wrong by shape.
+            if (designation.IsFlatProduct)
+            {
+                _ctx.NoteMissingSection(wanted.TypeName, designation.KindName, designation.Standard);
+                return BuildResult.Fail($"{designation.KindName} \"{wanted.TypeName}\" - не несущая конструкция");
+            }
+
+            var match = width > 0
+                ? _ctx.Types.ResolveSizedSymbol(BuiltInCategory.OST_StructuralFraming, wanted, width, height)
+                : null;
+
+            var resolved = match?.Type
+                        ?? _ctx.Types.ResolveSymbol(BuiltInCategory.OST_StructuralFraming, wanted);
 
             if (resolved == null) return BuildResult.Fail("в проекте нет семейств несущих конструкций");
+
+            // A framing family cannot be resized the way a door can, so a section that is neither
+            // named nor sized like the one the model asks for is simply a different section. On a
+            // real run this refused 2552 members - every angle, tube and plate would otherwise have
+            // become the one I-beam the project happened to have loaded, and the model would look
+            // plausible while being structurally false. DirectShape keeps the true shape instead.
+            if (IsSubstitute(match, resolved, wanted))
+            {
+                _ctx.NoteMissingSection(wanted?.TypeName, designation.KindName, designation.Standard);
+                return BuildResult.Fail(Missing(designation, wanted));
+            }
 
             try
             {
@@ -128,14 +150,46 @@ namespace IFC2RVT.Builders
             return width > 0 && height > 0;
         }
 
+        /// <summary>
+        /// True when the section on offer is neither the one asked for by name nor one of matching
+        /// size. Named and sized matches are both legitimate; anything else is a different profile
+        /// wearing the right place in the model.
+        /// </summary>
+        static bool IsSubstitute(Mapping.TypeResolver.Resolved<FamilySymbol> match,
+                                 FamilySymbol resolved, RevitTypeName wanted)
+        {
+            if (match != null && !match.IsSubstitute) return false;
+
+            var name = wanted?.TypeName;
+            if (string.IsNullOrWhiteSpace(name)) return false;   // nothing was asked for
+
+            // Compare through the designation, so a type named with Latin X still matches a
+            // section the file spelled with Cyrillic Х.
+            return !SteelDesignation.SameSection(resolved.Name, name);
+        }
+
+        /// <summary>
+        /// Says which family is missing, not merely that something is. A report that names the
+        /// standard turns a wall of failures into a shopping list.
+        /// </summary>
+        static string Missing(SteelDesignation designation, RevitTypeName name)
+        {
+            var text = name?.TypeName;
+            if (string.IsNullOrWhiteSpace(text)) return "профиль не определён - оставлено геометрией";
+
+            return designation.Standard == null
+                ? $"нет типоразмера \"{text}\" - оставлено геометрией"
+                : $"нет типоразмера \"{text}\" ({designation.KindName}, {designation.Standard}) - оставлено геометрией";
+        }
+
         string SectionNote(IIfcElement element, FamilySymbol symbol)
         {
             var wanted = SectionName(element)?.TypeName;
             if (string.IsNullOrWhiteSpace(wanted)) return null;
 
-            return string.Equals(symbol.Name, wanted, StringComparison.OrdinalIgnoreCase)
+            return SteelDesignation.SameSection(symbol.Name, wanted)
                 ? null
-                : $"профиль \"{wanted}\" не найден, поставлен \"{symbol.Name}\"";
+                : $"профиль подобран по габариту: \"{wanted}\" → \"{symbol.Name}\"";
         }
 
         /// <summary>

@@ -41,6 +41,10 @@ namespace IFC2RVT.Conversion
         public int LevelsCreated { get; set; }
         public int TypesCreated { get; set; }
         public int SharedParametersCreated { get; set; }
+        /// <summary>Sections the project has no family for: designation -> (kind, standard, count).</summary>
+        public List<Tuple<string, string, string, int>> MissingSections { get; }
+            = new List<Tuple<string, string, string, int>>();
+
         public int GridsCreated { get; set; }
         public int GridsReused { get; set; }
         public int MaterialsCreated { get; set; }
@@ -144,6 +148,28 @@ namespace IFC2RVT.Conversion
                 sb.AppendLine("Замечания (элемент создан, но требует проверки):");
                 sb.AppendLine(new string('-', 60));
                 foreach (var c in caveats) sb.AppendLine($"{c.Count(),6}x  {c.Key}");
+            }
+
+            if (MissingSections.Count > 0)
+            {
+                var wanted = MissingSections.Sum(m => m.Item4);
+                sb.AppendLine();
+                sb.AppendLine($"НЕ ХВАТАЕТ СЕМЕЙСТВ: {MissingSections.Count} сечений, {wanted} элементов");
+                sb.AppendLine(new string('-', 60));
+                sb.AppendLine("Эти элементы оставлены геометрией, чтобы не подменять сечение чужим.");
+                sb.AppendLine("Загрузите семейства и запустите конвертацию заново.");
+                sb.AppendLine();
+
+                foreach (var group in MissingSections
+                             .GroupBy(m => Tuple.Create(m.Item2, m.Item3))
+                             .OrderByDescending(g => g.Sum(m => m.Item4)))
+                {
+                    var standard = string.IsNullOrEmpty(group.Key.Item2) ? "" : "  " + group.Key.Item2;
+                    sb.AppendLine($"  {group.Sum(m => m.Item4),6} элементов   {group.Key.Item1}{standard}");
+
+                    foreach (var section in group.OrderByDescending(m => m.Item4).Take(8))
+                        sb.AppendLine($"           {section.Item4,6}x  {section.Item1}");
+                }
             }
 
             return sb.ToString();

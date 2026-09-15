@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>DesignationTests</AssemblyName>
+    <RootNamespace>IFC2RVT.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Linked rather than referenced: SteelDesignation has no Revit dependency on purpose, so it
+         can be tested without a Revit session, which is the only way this rule gets verified. -->
+    <Compile Include="..\..\src\IFC2RVT.Core\Mapping\SteelDesignation.cs" Link="SteelDesignation.cs" />
+  </ItemGroup>
+
+</Project>

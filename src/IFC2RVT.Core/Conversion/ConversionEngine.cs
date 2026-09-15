@@ -81,6 +81,10 @@ namespace IFC2RVT.Conversion
                     _report.SharedParametersCreated = parameters.ParametersCreated;
                     _report.MaterialsCreated = materials.MaterialsCreated;
                     _report.MaterialsColoured = materials.MaterialsColoured;
+
+                    foreach (var missing in ctx.MissingSections.Values)
+                        _report.MissingSections.Add(Tuple.Create(
+                            missing.Designation, missing.Kind, missing.Standard ?? "", missing.Count));
                 }
             }
 

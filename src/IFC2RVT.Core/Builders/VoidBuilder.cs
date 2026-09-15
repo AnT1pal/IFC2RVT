@@ -38,7 +38,12 @@ namespace IFC2RVT.Builders
             var opening = (IIfcOpeningElement)product;
 
             var ifcHost = _ctx.Ifc.OpeningHosts.TryGetValue(opening.EntityLabel, out var h) ? h : null;
-            if (ifcHost == null) return BuildResult.Fail("проём не связан с хостом");
+
+            // Most openings in a detailed model are orphans: the test file holds 3752 of them but
+            // only 440 IfcRelVoidsElement, because bolt holes live inside the shapes of assemblies
+            // rather than voiding a building element. Nothing is wrong and nothing can be cut.
+            if (ifcHost == null)
+                return BuildResult.Fail("файл не указывает, что вырезает этот проём");
 
             var host = _ctx.Created(ifcHost);
             if (host == null) return BuildResult.Fail("хост не сконвертирован нативно");
@@ -60,6 +65,12 @@ namespace IFC2RVT.Builders
                     case Ceiling _:
                     case RoofBase _:
                         return CutHorizontal(host, min, max);
+
+                    case FamilyInstance _:
+                        // Openings through beams and columns are bolt holes. NewOpening can make
+                        // them, but it needs the reference face chosen correctly, and a hole put
+                        // through the wrong face of a member is worse than no hole at all.
+                        return BuildResult.Fail("проёмы в балках и колоннах пока не вырезаются");
 
                     default:
                         return BuildResult.Fail("хост " + host.GetType().Name + " не принимает проёмы");

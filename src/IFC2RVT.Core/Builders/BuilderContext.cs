@@ -75,6 +75,37 @@ namespace IFC2RVT.Builders
             return _byGuid.TryGetValue(product.GlobalId.ToString(), out var id) ? Doc.GetElement(id) : null;
         }
 
+        /// <summary>
+        /// Sections the model asked for that the project has no family for, with how many members
+        /// wanted each. Collected during conversion and printed as a shopping list: a report that
+        /// names the standard is actionable, a wall of identical failures is not.
+        /// </summary>
+        public Dictionary<string, MissingSection> MissingSections { get; }
+            = new Dictionary<string, MissingSection>(StringComparer.OrdinalIgnoreCase);
+
+        public class MissingSection
+        {
+            public string Designation { get; set; }
+            public string Kind { get; set; }
+            public string Standard { get; set; }
+            public int Count { get; set; }
+        }
+
+        public void NoteMissingSection(string designation, string kind, string standard)
+        {
+            if (string.IsNullOrWhiteSpace(designation)) return;
+
+            if (!MissingSections.TryGetValue(designation, out var entry))
+                MissingSections[designation] = entry = new MissingSection
+                {
+                    Designation = designation,
+                    Kind = kind,
+                    Standard = standard
+                };
+
+            entry.Count++;
+        }
+
         public RevitTypeName NameOf(IIfcProduct product)
             => RevitTypeName.Parse(IfcHelpers.Str(product?.Name));
 
