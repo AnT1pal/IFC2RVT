@@ -94,7 +94,7 @@ namespace IFC2RVT.Ifc
         public IEnumerable<Tuple<IIfcRepresentationItem, Transform>> Items(
             IIfcRepresentation representation, Transform accumulated = null, int depth = 0)
         {
-            if (representation == null || depth > 8) yield break;
+            if (representation == null || depth > 8) yield break;   // mapped representations do not nest deeply
             var outer = accumulated ?? Transform.Identity;
 
             foreach (var item in representation.Items)
@@ -194,7 +194,11 @@ namespace IFC2RVT.Ifc
 
         ExtrusionInfo ExtrusionFrom(IIfcRepresentationItem item, Transform outer, bool clipped, int depth = 0)
         {
-            if (depth > 8) return null;
+            // A wall with many openings is a stack of boolean subtractions, one level per hole.
+            // The old limit of 8 quietly lost the extrusion on such walls, and with it the only
+            // source of wall height - which is why walls containing doors and windows came out as
+            // DirectShape while their plain neighbours converted natively.
+            if (depth > 64) return null;
 
             switch (item)
             {

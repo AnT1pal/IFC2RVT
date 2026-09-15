@@ -42,8 +42,17 @@ namespace IFC2RVT.Builders
             var baseZ = BaseElevationOf(extrusion, world, axis);
 
             var height = HeightOf(extrusion, axis, baseZ, out var trimmed);
+            var heightFromBody = false;
+
+            // The extrusion is the usual source of height, but it is lost whenever the body is
+            // something this reader cannot reduce to a sweep. Thickness and axis survive that, so
+            // refusing the wall over height alone throws away a wall we could otherwise build.
             if (height <= _ctx.ShortCurveTolerance)
-                return BuildResult.Fail("не определена высота стены");
+            {
+                if (!FallbackExtent(wall, ref baseZ, out height))
+                    return BuildResult.Fail("не определена высота стены");
+                heightFromBody = true;
+            }
             var level = _ctx.Levels.For(wall, new XYZ(0, 0, baseZ));
             if (level == null) return BuildResult.Fail("нет подходящего уровня");
 
@@ -71,7 +80,10 @@ namespace IFC2RVT.Builders
                 return new BuildResult
                 {
                     Element = created,
-                    Message = Notes(ClipNote(extrusion, trimmed), resolved.Note)
+                    Message = Notes(
+                        ClipNote(extrusion, trimmed),
+                        heightFromBody ? "высота взята из габарита тела - выдавливание не разобрано" : null,
+                        resolved.Note)
                 };
             }
             catch (Exception ex)
@@ -244,6 +256,95 @@ namespace IFC2RVT.Builders
 
             trimmed = full - clipped;
             return clipped;
+        }
+
+        /// <summary>
+        /// Height and base taken from the declared quantities, or failing that from the extent of
+        /// the built geometry. Both are worse than the extrusion - quantities can disagree with the
+        /// model, and an extent includes anything the body happens to contain - so this only runs
+        /// when the extrusion is unavailable, and the result is flagged in the report.
+        /// </summary>
+        bool FallbackExtent(IIfcWall wall, ref double baseZ, out double height)
+        {
+            height = 0.0;
+
+            var declared = QuantityHeight(wall);
+            if (declared > _ctx.ShortCurveTolerance)
+            {
+                height = declared;
+                return true;
+            }
+
+            var geometry = new DirectShapeBuilder(_ctx).BuildGeometry(wall, out _);
+            if (geometry == null) return false;
+
+            var lo = double.MaxValue;
+            var hi = double.MinValue;
+
+            foreach (var item in geometry)
+            {
+                switch (item)
+                {
+                    case Solid solid when solid.Volume > 0:
+                    {
+                        var box = solid.GetBoundingBox();
+                        if (box == null) continue;
+                        foreach (var corner in Corners(box))
+                        {
+                            lo = Math.Min(lo, corner.Z);
+                            hi = Math.Max(hi, corner.Z);
+                        }
+                        break;
+                    }
+
+                    case Mesh mesh:
+                        foreach (var vertex in mesh.Vertices)
+                        {
+                            lo = Math.Min(lo, vertex.Z);
+                            hi = Math.Max(hi, vertex.Z);
+                        }
+                        break;
+                }
+            }
+
+            if (lo == double.MaxValue || hi - lo <= _ctx.ShortCurveTolerance) return false;
+
+            baseZ = lo;
+            height = hi - lo;
+            return true;
+        }
+
+        static IEnumerable<XYZ> Corners(BoundingBoxXYZ box)
+        {
+            var min = box.Min;
+            var max = box.Max;
+
+            for (int i = 0; i < 8; i++)
+            {
+                var local = new XYZ(
+                    (i & 1) == 0 ? min.X : max.X,
+                    (i & 2) == 0 ? min.Y : max.Y,
+                    (i & 4) == 0 ? min.Z : max.Z);
+
+                yield return box.Transform == null ? local : box.Transform.OfPoint(local);
+            }
+        }
+
+        /// <summary>Height from Qto_WallBaseQuantities, when the exporter wrote quantities.</summary>
+        double QuantityHeight(IIfcWall wall)
+        {
+            foreach (var quantitySet in IfcHelpers.QuantitySets(wall))
+            {
+                foreach (var quantity in quantitySet.Quantities.OfType<IIfcQuantityLength>())
+                {
+                    var name = (string)quantity.Name;
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    if (name.IndexOf("Height", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return (double)quantity.LengthValue * _ctx.Ifc.Scale.Length;
+                }
+            }
+            return 0.0;
         }
 
         double BaseElevationOf(ExtrusionInfo extrusion, Transform world, Curve axis)

@@ -129,7 +129,7 @@ namespace IFC2RVT.Builders
 
         ExtrusionInfo ExtrusionOf(IIfcRepresentationItem item, int depth = 0)
         {
-            if (depth > 8) return null;
+            if (depth > 64) return null;   // same reason as RepresentationReader: openings nest
 
             switch (item)
             {
