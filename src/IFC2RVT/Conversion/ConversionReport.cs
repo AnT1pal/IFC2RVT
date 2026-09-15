@@ -45,6 +45,12 @@ namespace IFC2RVT.Conversion
         public List<Tuple<string, string, string, int>> MissingSections { get; }
             = new List<Tuple<string, string, string, int>>();
 
+        /// <summary>Framing families generated from the section outlines found in the file.</summary>
+        public int SectionFamiliesCreated { get; set; }
+
+        /// <summary>What the section generator made, and what it declined to make and why.</summary>
+        public List<string> SectionNotes { get; } = new List<string>();
+
         public int GridsCreated { get; set; }
         public int GridsReused { get; set; }
         public int MaterialsCreated { get; set; }
@@ -99,6 +105,16 @@ namespace IFC2RVT.Conversion
             sb.AppendLine($"Создано материалов:   {MaterialsCreated} (с цветом из IFC: {MaterialsColoured})");
             if (GridsCreated > 0 || GridsReused > 0)
                 sb.AppendLine($"Создано осей:         {GridsCreated} (переиспользовано: {GridsReused})");
+            if (SectionFamiliesCreated > 0)
+                sb.AppendLine($"Семейств сечений:     {SectionFamiliesCreated} (по контурам из файла)");
+
+            if (SectionNotes.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Сечения проката:");
+                sb.AppendLine(new string('-', 60));
+                foreach (var note in SectionNotes.Take(20)) sb.AppendLine("  " + note);
+            }
 
             if (WarningsSuppressed > 0 || ErrorsResolved > 0)
             {

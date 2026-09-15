@@ -12,7 +12,13 @@ namespace IFC2RVT.Conversion
         public bool ConvertWalls { get; set; } = true;
         public bool ConvertSlabs { get; set; } = true;
         public bool ConvertColumns { get; set; } = true;
-        public bool ConvertBeams { get; set; } = false;
+        /// <summary>
+        /// On by default since the converter stopped substituting profiles. It used to be off for a
+        /// good reason - a project without the right sections loaded got the nearest one on every
+        /// member, which is worse than honest geometry - but a member now either gets its own
+        /// section or stays geometry, so there is nothing left to guard against.
+        /// </summary>
+        public bool ConvertBeams { get; set; } = true;
         public bool ConvertOpenings { get; set; } = true;
         public bool ConvertSpaces { get; set; } = true;
         public bool ConvertCeilings { get; set; } = true;
@@ -53,6 +59,17 @@ namespace IFC2RVT.Conversion
 
         /// <summary>Duplicate the closest existing type when no exact match is found.</summary>
         public bool CreateMissingTypes { get; set; } = true;
+
+        /// <summary>
+        /// Build a structural framing family for each steel section, from the cross-section outline
+        /// the IFC carries.
+        ///
+        /// A detailing model runs to thousands of members over a few dozen sections, and without a
+        /// family for those sections every member falls through to DirectShape. The outline is taken
+        /// from the file, never reconstructed from the designation, so a section the file describes
+        /// only as a mesh is still left as geometry.
+        /// </summary>
+        public bool GenerateSectionFamilies { get; set; } = true;
 
         /// <summary>
         /// Shift the model so it sits near the Revit origin.

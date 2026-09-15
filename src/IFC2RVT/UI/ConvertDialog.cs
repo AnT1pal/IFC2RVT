@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -62,6 +62,7 @@ namespace IFC2RVT.UI
             root.Children.Add(Check("typeProps", "Включая свойства типа (IfcRelDefinesByType)", _options.IncludeTypeProperties));
             root.Children.Add(Check("names", "Подбирать типы по именам Revit из IFC (Семейство:Тип:Id)", _options.UseRevitNameHeuristic));
             root.Children.Add(Check("createTypes", "Создавать недостающие типы дублированием", _options.CreateMissingTypes));
+            root.Children.Add(Check("sectionFamilies", "Создавать семейства сечений проката по контурам из IFC", _options.GenerateSectionFamilies));
             root.Children.Add(Check("moveToOrigin", "Переносить модель к началу координат", _options.MoveToOrigin));
 
             root.Children.Add(LimitRow());
@@ -226,6 +227,7 @@ namespace IFC2RVT.UI
             _options.ConvertGrids = IsChecked("grids");
             _options.ConvertOpeningVoids = IsChecked("voids");
             _options.ReuseSharedGeometry = IsChecked("reuse");
+            _options.GenerateSectionFamilies = IsChecked("sectionFamilies");
             _options.FallbackToDirectShape = IsChecked("fallback");
             _options.TransferProperties = IsChecked("properties");
             _options.IncludeTypeProperties = IsChecked("typeProps");

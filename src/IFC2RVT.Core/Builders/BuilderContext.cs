@@ -47,6 +47,12 @@ namespace IFC2RVT.Builders
         public MaterialResolver Materials { get; }
         public ConversionOptions Options { get; }
 
+        /// <summary>
+        /// Framing families generated from the outlines in the file, one per steel section. Null
+        /// when the feature is off or no template was found, in which case beams behave as before.
+        /// </summary>
+        public SectionFamilyFactory Sections { get; set; }
+
         public double ShortCurveTolerance { get; }
 
         readonly Dictionary<string, ElementId> _byGuid = new Dictionary<string, ElementId>(StringComparer.Ordinal);

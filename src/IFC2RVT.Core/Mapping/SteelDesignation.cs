@@ -10,14 +10,16 @@ namespace IFC2RVT.Mapping
     public enum SteelKind
     {
         Unknown,
-        Angle,          // уголок
-        HollowSection,  // гнутый замкнутый профиль
-        Channel,        // швеллер
-        IBeam,          // двутавр
-        Strip,          // полоса
-        Sheet,          // лист
-        CheckerPlate,   // рифлёный лист
-        Tube            // труба
+        Angle,              // уголок
+        HollowSection,      // гнутый замкнутый профиль
+        Channel,            // швеллер горячекатаный
+        ColdFormedChannel,  // швеллер гнутый
+        IBeam,              // двутавр
+        Strip,              // полоса
+        Sheet,              // лист
+        CheckerPlate,       // рифлёный лист
+        Tube,               // труба
+        Round               // круг
     }
 
     /// <summary>
@@ -28,8 +30,8 @@ namespace IFC2RVT.Mapping
     ///
     /// The first is homoglyphs. A designation written with Cyrillic Х and the same designation
     /// written with Latin X are different strings that no name match will join, and they look
-    /// identical on screen. The model this was built against contains both spellings of the same
-    /// standard - "Гн[160Х60Х4" in Cyrillic beside "Гнз120X60X4" in Latin.
+    /// identical on screen. The model this was built against writes every "Гн[" size with Cyrillic
+    /// Х and every "Гнз" size with Latin X, so the two spellings are not even a rarity there.
     ///
     /// The second is kind. Counted over that model, 40% of the steel is hollow section and 34% is
     /// angle, while I-beams are 1.8%. A converter that quietly substitutes whatever framing family
@@ -52,8 +54,14 @@ namespace IFC2RVT.Mapping
         static readonly (Regex Pattern, SteelKind Kind, string Standard)[] Rules =
         {
             (new Regex(@"^L\s*\d", RegexOptions.IgnoreCase), SteelKind.Angle, "ГОСТ 8509-93 / 8510-86"),
-            (new Regex(@"^Гн[зc\[]?\s*\d", RegexOptions.IgnoreCase), SteelKind.HollowSection, "ГОСТ 30245-2003"),
+
+            // "Гн[" before "Гнз": the bracket is the channel symbol, and a rule that accepted it as
+            // a closed section would swallow every cold-formed channel in the file.
+            (new Regex(@"^Г[нH]\s*\[", RegexOptions.IgnoreCase), SteelKind.ColdFormedChannel, "ГОСТ 8278-83"),
+            (new Regex(@"^Г[нH]\s*[зc]?\s*\d", RegexOptions.IgnoreCase), SteelKind.HollowSection, "ГОСТ 30245-2003"),
             (new Regex(@"^\[\s*\d"), SteelKind.Channel, "ГОСТ 8240-97"),
+            (new Regex(@"^[ВB]ГП", RegexOptions.IgnoreCase), SteelKind.Tube, "ГОСТ 3262-75"),
+            (new Regex(@"^[фФ]\s*\d", RegexOptions.IgnoreCase), SteelKind.Round, "ГОСТ 2590-2006"),
             (new Regex(@"^(I|Б|Ш|K|Д)\s*\d", RegexOptions.IgnoreCase), SteelKind.IBeam, "ГОСТ 26020-83 / 8239-89"),
             (new Regex(@"^(PL|ПЛ)\s*\d", RegexOptions.IgnoreCase), SteelKind.Strip, "ГОСТ 103-2006"),
             (new Regex(@"^[-—–]\s*\d+\s*[*xхХ]"), SteelKind.Sheet, "ГОСТ 19903-2015"),
@@ -109,8 +117,14 @@ namespace IFC2RVT.Mapping
 
         /// <summary>
         /// Folds a designation to a form two spellings of the same section share: homoglyphs to
-        /// Latin, the separator to a single form, and the interchangeable hollow-section prefixes
-        /// to one. "Гн[160Х60Х4" and "Гнз160x60x4" are the same product written two ways.
+        /// Latin, the separator to a single form, and the cold-formed prefixes to one spelling each.
+        ///
+        /// What it deliberately does NOT fold is "Гн[" into "Гнз". The bracket is the Russian symbol
+        /// for a channel and the "з" abbreviates "замкнутый", and the sample file settles it: every
+        /// "Гн[" outline stored there is a closed tube with exactly one wall missing - 1088 mm²
+        /// against 1696 for "Гн[160Х60Х4", 402 against 564 for "Гн[60Х40Х3". They are an open and a
+        /// closed section, and the file contains both a "Гнз60X40X3" and a "Гн[60Х40Х3", so folding
+        /// them together would hand 284 closed tubes the outline of a channel.
         /// </summary>
         public static string Normalise(string text)
         {
@@ -122,8 +136,10 @@ namespace IFC2RVT.Mapping
 
             var value = sb.ToString();
 
-            // Hollow sections appear as "Гнз", "Гн[" and "Гн" for the same standard.
-            value = Regex.Replace(value, @"^(Гн)[зc\[]", "$1", RegexOptions.IgnoreCase);
+            // One canonical spelling per cold-formed kind. The bracket form is settled first so the
+            // closed-section rule below cannot claim it.
+            value = Regex.Replace(value, @"^Г[нH]\s*\[", "Гн[", RegexOptions.IgnoreCase);
+            value = Regex.Replace(value, @"^Г[нH]\s*(?:[зc]\s*)?(?=\d)", "Гнз", RegexOptions.IgnoreCase);
 
             // The size separator is written as x, *, or the multiplication sign.
             value = value.Replace('*', 'x').Replace('×', 'x').Replace('X', 'x');
@@ -155,6 +171,8 @@ namespace IFC2RVT.Mapping
                     case SteelKind.Angle: return "уголок";
                     case SteelKind.HollowSection: return "гнутый замкнутый профиль";
                     case SteelKind.Channel: return "швеллер";
+                    case SteelKind.ColdFormedChannel: return "гнутый швеллер";
+                    case SteelKind.Round: return "круг";
                     case SteelKind.IBeam: return "двутавр";
                     case SteelKind.Strip: return "полоса";
                     case SteelKind.Sheet: return "лист";

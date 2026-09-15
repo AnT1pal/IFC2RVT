@@ -64,6 +64,15 @@ namespace IFC2RVT.Builders
                 return BuildResult.Fail($"{designation.KindName} \"{wanted.TypeName}\" - не несущая конструкция");
             }
 
+            // A family built from the outline this very file carries is the section itself, not a
+            // stand-in for it, so it comes before anything the project happens to have loaded.
+            var generated = _ctx.Sections?.Symbol(wanted?.TypeName);
+            if (generated != null)
+            {
+                var placed = PlaceGenerated(generated, wanted, frame, start, end, level, extrusion);
+                if (placed != null) return placed;
+            }
+
             var match = width > 0
                 ? _ctx.Types.ResolveSizedSymbol(BuiltInCategory.OST_StructuralFraming, wanted, width, height)
                 : null;
@@ -107,6 +116,88 @@ namespace IFC2RVT.Builders
                 return BuildResult.Fail("NewFamilyInstance: " + ex.Message);
             }
         }
+
+        /// <summary>
+        /// Places a member into a family generated from the file's own outline.
+        ///
+        /// Returns null rather than a failure when it does not work out, so the caller falls back to
+        /// the ordinary search through loaded families and, failing that, to geometry.
+        /// </summary>
+        BuildResult PlaceGenerated(FamilySymbol symbol, RevitTypeName wanted, Transform frame,
+                                   XYZ start, XYZ end, Level level, ExtrusionInfo extrusion)
+        {
+            FamilyInstance instance;
+            try
+            {
+                TypeResolver.EnsureActive(symbol);
+                var axis = Line.CreateBound(start, end);
+                instance = _ctx.Doc.Create.NewFamilyInstance(axis, symbol, level, StructuralType.Beam);
+            }
+            catch
+            {
+                return null;
+            }
+
+            if (instance == null) return null;
+
+            DetachFromLevel(instance);
+            AlignSection(instance, frame, (end - start).Normalize());
+
+            // The first member of each section is measured against the length it was placed at. A
+            // family whose solid never got tied to its end planes builds every member at the
+            // template's nominal length, and nothing throws when that happens - only a measurement
+            // catches it.
+            if (_ctx.Sections.NeedsCheck(wanted?.TypeName) &&
+                !_ctx.Sections.Accept(wanted?.TypeName, instance, start.DistanceTo(end)))
+            {
+                try { _ctx.Doc.Delete(instance.Id); } catch { }
+                return null;
+            }
+
+            return new BuildResult
+            {
+                Element = instance,
+                Message = extrusion.WasClipped ? "тело подрезано - длина взята до подрезки" : null
+            };
+        }
+
+        /// <summary>
+        /// Turns the section about the member's axis until it sits the way the IFC has it.
+        ///
+        /// The generated family draws the outline in its own YZ plane, but Revit decides for itself
+        /// which way that plane faces once the member is placed on a line. On a symmetric section
+        /// nothing shows; on an angle or a channel a quarter turn is the whole difference between a
+        /// correct model and a plausible one.
+        /// </summary>
+        static void AlignSection(FamilyInstance instance, Transform frame, XYZ axis)
+        {
+            try
+            {
+                var placed = instance.GetTransform();
+                if (placed == null) return;
+
+                // Correct only what is understood: if the instance is not oriented along its own
+                // axis, the assumption this correction rests on does not hold.
+                if (Math.Abs(placed.BasisX.Normalize().DotProduct(axis)) < 0.99) return;
+
+                var have = Perpendicular(placed.BasisY, axis);
+                var want = Perpendicular(frame.BasisX, axis);
+                if (have.GetLength() < 1e-9 || want.GetLength() < 1e-9) return;
+
+                var angle = have.Normalize().AngleOnPlaneTo(want.Normalize(), axis);
+                if (angle < 1e-6 || Math.Abs(angle - 2 * Math.PI) < 1e-6) return;
+
+                var parameter = instance.get_Parameter(BuiltInParameter.STRUCTURAL_BEND_DIR_ANGLE);
+                if (parameter != null && !parameter.IsReadOnly)
+                    parameter.Set(parameter.AsDouble() + angle);
+            }
+            catch
+            {
+                // An unrotated section is still the right section; never lose the member over this.
+            }
+        }
+
+        static XYZ Perpendicular(XYZ vector, XYZ axis) => vector - axis.Multiply(vector.DotProduct(axis));
 
         /// <summary>
         /// Profile designation, from the most trustworthy source available.

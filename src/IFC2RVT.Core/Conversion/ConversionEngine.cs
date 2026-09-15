@@ -75,7 +75,17 @@ namespace IFC2RVT.Conversion
                     var plan = BuildPlan(ifc);
                     progress?.Report($"К конвертации: {plan.Count} элементов");
 
+                    // Sections before members: a member has nowhere to go until a family exists for
+                    // its profile, and the profiles are only knowable once the plan is collected.
+                    var sections = PrepareSections(ctx, ifc, plan, progress);
+
                     Convert(ctx, plan, properties, progress);
+
+                    if (sections != null)
+                    {
+                        _report.SectionFamiliesCreated = sections.FamiliesCreated;
+                        foreach (var note in sections.Notes) _report.SectionNotes.Add(note);
+                    }
 
                     _report.TypesCreated = types.TypesCreated;
                     _report.SharedParametersCreated = parameters.ParametersCreated;
@@ -230,6 +240,42 @@ namespace IFC2RVT.Conversion
             if (e.IsDecomposedBy.Any() && ifc.Representations.BodyOf(e) == null) return false;
 
             return true;
+        }
+
+        /// <summary>
+        /// Creates one framing family per steel section the beams ask for.
+        ///
+        /// Runs in its own transaction: a family is loaded into the project, and doing that in the
+        /// middle of the batch that is placing elements risks losing the whole batch if one outline
+        /// is rejected.
+        /// </summary>
+        SectionFamilyFactory PrepareSections(BuilderContext ctx, IfcModelContext ifc,
+                                             List<IIfcProduct> plan, IProgress<string> progress)
+        {
+            if (!_options.ConvertBeams || !_options.GenerateSectionFamilies) return null;
+
+            var members = plan.Where(p => p is IIfcBeam || p is IIfcMember)
+                              .OfType<IIfcElement>()
+                              .ToList();
+            if (members.Count == 0) return null;
+
+            progress?.Report("Сечения проката...");
+
+            var sections = new SectionFamilyFactory(_doc, ifc);
+
+            // Not wrapped in a batch: the factory opens a transaction per section, so a section
+            // Revit refuses costs that section and not the rest.
+            try
+            {
+                sections.Prepare(members, progress);
+            }
+            catch (Exception ex)
+            {
+                _report.SectionNotes.Add("Создание сечений прервано: " + ex.Message);
+            }
+
+            ctx.Sections = sections;
+            return sections;
         }
 
         // ---- conversion -------------------------------------------------------------------------

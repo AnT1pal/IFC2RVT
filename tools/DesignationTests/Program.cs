@@ -9,10 +9,12 @@ namespace IFC2RVT.Tests
     /// Checks the steel designation rules against the spellings that actually occur in a real
     /// Russian model, rather than against invented ones.
     ///
-    /// Every case below was taken from the catalogue extracted by tools/profiles.py: the same file
-    /// writes "Гн[160Х60Х4" with Cyrillic Х and "Гнз120X60X4" with Latin X for sections of the same
-    /// standard, and a converter that treats those as different designations will silently fail to
-    /// find a family that is right there in the project.
+    /// Every case below was taken from the catalogue extracted out of a real model: 45 designations
+    /// over 3344 members. Two spellings pull in opposite directions there, and both have to be got
+    /// right. "Гн[160Х60Х4" is written with Cyrillic Х while "Гнз120X60X4" uses Latin X, so a
+    /// converter comparing raw strings fails to find a family sitting in the project. Yet folding
+    /// too hard is worse: "Гн[" and "Гнз" differ by an open versus a closed section, the model
+    /// contains a 60x40x3 in each, and merging them hands 284 closed tubes a channel's outline.
     /// </summary>
     internal static class Program
     {
@@ -24,8 +26,8 @@ namespace IFC2RVT.Tests
             try { Console.OutputEncoding = Encoding.UTF8; } catch { }
 
             Section("одно сечение, разные написания — должны совпасть");
-            Same("Гн[160Х60Х4", "Гнз160X60X4", true, "кириллическая Х против латинской X");
-            Same("Гнз120X60X4", "Гн[120х60х4]", true, "префикс Гнз / Гн[ и регистр");
+            Same("Гн[160Х60Х4", "Гн[160x60x4", true, "тот же швеллер: кириллическая Х против латинской X");
+            Same("Гнз120X60X4", "Гн120х60х4", true, "замкнутый профиль с суффиксом з и без");
             Same("L50X3", "L50x3", true, "регистр разделителя");
             Same("I30М", "I30M", true, "кириллическая М");
             Same("Гнз60X40X3", "Гн60x40x3", true, "префикс с суффиксом и без");
@@ -43,14 +45,25 @@ namespace IFC2RVT.Tests
             Same("I20Б1", "I 20Н1", false, "серия Б против Н - разные профили");
             Same("L50X3", "L50X4", false, "разная толщина полки");
 
+            // Проверено по контурам в файле: у "Гн[" площадь сечения равна замкнутой трубе
+            // минус ровно одна стенка (1088 против 1696 у 160x60x4, 402 против 564 у 60x40x3).
+            // "Гн[" - гнутый швеллер, "Гнз" - замкнутый профиль, и в модели есть оба размера 60x40x3.
+            Same("Гн[60Х40Х3", "Гнз60X40X3", false, "гнутый швеллер против замкнутого профиля");
+            Same("Гн[160Х60Х4", "Гнз160X60X4", false, "открытое сечение против закрытого");
+            Same("Гн[120Х50Х4", "Гн120x50x4", false, "скобка - это швеллер, а не сокращение");
+
             Section("вид проката по ГОСТ");
             Kind("L50X3", SteelKind.Angle);
             Kind("L100X63X6", SteelKind.Angle);
             Kind("L140X9", SteelKind.Angle);
             Kind("Гнз120X120X4", SteelKind.HollowSection);
-            Kind("Гн[160Х60Х4", SteelKind.HollowSection);
+            Kind("Гн140X60X4", SteelKind.HollowSection);
+            Kind("Гн[160Х60Х4", SteelKind.ColdFormedChannel);
+            Kind("Гн[60Х40Х3", SteelKind.ColdFormedChannel);
             Kind("I20Б1", SteelKind.IBeam);
             Kind("I25K1", SteelKind.IBeam);
+            Kind("ВГП DN20X2.8", SteelKind.Tube);
+            Kind("ф18", SteelKind.Round);
             Kind("PL1250*3", SteelKind.Strip);
             Kind("-10*150", SteelKind.Sheet);
             Kind("-12*110", SteelKind.Sheet);
@@ -63,6 +76,7 @@ namespace IFC2RVT.Tests
             Flat("рифл. t=4, B=900", true);
             Flat("L50X3", false);
             Flat("Гнз120X120X4", false);
+            Flat("Гн[160Х60Х4", false);
             Flat("I20Б1", false);
 
             Console.WriteLine();
